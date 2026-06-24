@@ -55,8 +55,30 @@ export default function Dashboard() {
     }
   };
 
+  const syncSmmOrders = async () => {
+    try {
+      await fetch('/api/smm/orders/sync', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+    } catch (e) {
+      console.error('Failed to sync SMM orders:', e);
+    }
+  };
+
   useEffect(() => {
-    fetchData();
+    const loadDashboardData = async () => {
+      if (token) {
+        if (activeTab === 'orders') {
+          await syncSmmOrders();
+        }
+        await fetchData();
+        if (refreshBalance) {
+          refreshBalance();
+        }
+      }
+    };
+    loadDashboardData();
   }, [token, activeTab]);
 
   const handleDepositSubmit = async (e) => {
@@ -179,17 +201,23 @@ export default function Dashboard() {
                     <thead>
                       <tr>
                         <th>Order ID</th>
-                        <th>Listing Details</th>
+                        <th>Type</th>
+                        <th>Listing / Service Details</th>
                         <th>Qty</th>
                         <th>Cost</th>
                         <th>Purchased At</th>
-                        <th>Delivery</th>
+                        <th>Link / Delivery</th>
                       </tr>
                     </thead>
                     <tbody>
                       {orders.map((order) => (
                         <tr key={order.id}>
                           <td style={{ fontFamily: 'monospace', fontWeight: 'bold' }}>#{order.id}</td>
+                          <td>
+                            <span className={`badge ${order.order_type === 'smm' ? 'badge-pending' : 'badge-approved'}`} style={{ fontSize: '0.65rem' }}>
+                              {order.order_type === 'smm' ? 'SMM' : 'Account'}
+                            </span>
+                          </td>
                           <td>
                             <div className="font-bold" style={{ color: 'var(--text-primary)' }}>{order.listing_title}</div>
                             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>ID: {order.listing_id}</span>
@@ -198,12 +226,29 @@ export default function Dashboard() {
                           <td className="font-bold" style={{ color: 'var(--text-primary)' }}>${parseFloat(order.price_paid).toFixed(2)}</td>
                           <td>{new Date(order.purchased_at).toLocaleDateString()}</td>
                           <td>
-                            <button 
-                              onClick={() => setSelectedAccounts(order)} 
-                              className="btn btn-outline btn-sm"
-                            >
-                              <Eye size={12} /> View accounts
-                            </button>
+                            {order.order_type === 'smm' ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                <a 
+                                  href={order.link} 
+                                  target="_blank" 
+                                  rel="noreferrer" 
+                                  className="color-accent" 
+                                  style={{ fontSize: '0.8rem', textDecoration: 'underline', fontWeight: 600 }}
+                                >
+                                  View Link
+                                </a>
+                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                  Status: <strong style={{ color: order.status === 'Completed' ? 'var(--success)' : 'var(--warning)' }}>{order.status}</strong>
+                                </span>
+                              </div>
+                            ) : (
+                              <button 
+                                onClick={() => setSelectedAccounts(order)} 
+                                className="btn btn-outline btn-sm"
+                              >
+                                <Eye size={12} /> View accounts
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -405,7 +450,7 @@ export default function Dashboard() {
             </p>
 
             <div className="accounts-box">
-              {selectedAccounts.accounts_data.join('\n')}
+              {Array.isArray(selectedAccounts.accounts_data) ? selectedAccounts.accounts_data.join('\n') : ''}
             </div>
 
             <div className="flex gap-4">

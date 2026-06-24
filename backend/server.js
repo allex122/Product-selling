@@ -13,6 +13,7 @@ import {
   getAccsBulkListingDetail,
   purchaseListing
 } from './api.js';
+import { SmmApiClient } from './smm_api.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -324,7 +325,7 @@ app.get('/api/orders', authenticateToken, async (req, res) => {
     // Parse JSON string back to array
     orders = orders.map(order => ({
       ...order,
-      accounts_data: JSON.parse(order.accounts_data)
+      accounts_data: (order.order_type === 'smm' || !order.accounts_data) ? [] : JSON.parse(order.accounts_data)
     }));
 
     res.json({ success: true, data: orders });
@@ -514,6 +515,14 @@ app.post('/api/admin/deposits/:id/reject', requireAdmin, async (req, res) => {
   }
 });
 
+async function getSmmClient(db) {
+  const apiKeyRow = await db.get("SELECT value FROM settings WHERE key = 'wow_smm_api_key'");
+  const baseUrlRow = await db.get("SELECT value FROM settings WHERE key = 'smm_base_url'");
+  const apiKey = apiKeyRow ? apiKeyRow.value : '';
+  const baseUrl = baseUrlRow ? baseUrlRow.value : 'https://wowsmmpanel.com/api/v2';
+  return new SmmApiClient(apiKey, baseUrl);
+}
+
 // --- Admin Stats ---
 app.get('/api/admin/stats', requireAdmin, async (req, res) => {
   const db = await getDbConnection();
@@ -537,6 +546,22 @@ app.get('/api/admin/stats', requireAdmin, async (req, res) => {
       providerStatus = `Error: ${e.message}`;
     }
 
+    // Check SMM connection & balance
+    let smmBalance = 'N/A';
+    let smmStatus = 'Disconnected';
+    try {
+      const smmClient = await getSmmClient(db);
+      const smmConn = await smmClient.getBalance();
+      if (smmConn && smmConn.balance !== undefined) {
+        smmBalance = smmConn.balance;
+        smmStatus = 'Connected';
+      } else {
+        smmStatus = `Error: ${smmConn.error || 'Failed to fetch balance'}`;
+      }
+    } catch (e) {
+      smmStatus = `Error: ${e.message}`;
+    }
+
     res.json({
       success: true,
       data: {
@@ -546,9 +571,217 @@ app.get('/api/admin/stats', requireAdmin, async (req, res) => {
         profit: (totalResellOrders.profit || 0).toFixed(2),
         pending_deposits: pendingDeposits.count,
         provider_balance: providerBalance,
-        provider_status: providerStatus
+        provider_status: providerStatus,
+        smm_balance: smmBalance,
+        smm_status: smmStatus
       }
     });
+});
+
+// --- SMM Panel Routes ---
+app.get('/api/smm/services', async (req, res) => {
+  const db = await getDbConnection();
+  try {
+    const client = await getSmmClient(db);
+    const services = await client.fetchServices();
+    
+    if (services.error || !Array.isArray(services)) {
+      return res.status(500).json({ success: false, message: services.error || 'Failed to retrieve SMM services' });
+    }
+
+    const markupPercentRow = await db.get("SELECT value FROM settings WHERE key = 'smm_markup_percent'");
+    const markupPercent = markupPercentRow ? parseFloat(markupPercentRow.value) : 20.0;
+
+    // Group services by category and apply markup
+    const groupedServices = {};
+    services.forEach(service => {
+      const category = service.category || 'General Services';
+      
+      const providerRate = parseFloat(service.rate);
+      let customerRate = providerRate;
+      if (!isNaN(providerRate)) {
+        customerRate = parseFloat((providerRate * (1 + markupPercent / 100)).toFixed(4));
+      }
+
+      if (!groupedServices[category]) {
+        groupedServices[category] = [];
+      }
+
+      groupedServices[category].push({
+        id: service.service,
+        name: service.name,
+        type: service.type,
+        min: service.min,
+        max: service.max,
+        rate: customerRate, // Rate per 1000 items
+        original_rate: providerRate,
+        refill: service.refill,
+        cancel: service.cancel
+      });
+    });
+
+    res.json({ success: true, data: groupedServices });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  } finally {
+    await db.close();
+  }
+});
+
+app.post('/api/smm/order', authenticateToken, async (req, res) => {
+  const { serviceId, link, quantity } = req.body;
+  if (!serviceId || !link || !quantity) {
+    return res.status(400).json({ success: false, message: 'serviceId, link and quantity are required' });
+  }
+
+  const db = await getDbConnection();
+  try {
+    const client = await getSmmClient(db);
+    const markupPercentRow = await db.get("SELECT value FROM settings WHERE key = 'smm_markup_percent'");
+    const markupPercent = markupPercentRow ? parseFloat(markupPercentRow.value) : 20.0;
+
+    // Fetch SMM services from API to validate and get rate
+    const services = await client.fetchServices();
+    if (services.error || !Array.isArray(services)) {
+      return res.status(500).json({ success: false, message: 'SMM Provider currently offline' });
+    }
+
+    const service = services.find(s => s.service == serviceId);
+    if (!service) {
+      return res.status(400).json({ success: false, message: 'Invalid SMM Service ID' });
+    }
+
+    // Validate quantity
+    const qty = parseInt(quantity);
+    if (isNaN(qty) || qty < parseInt(service.min) || qty > parseInt(service.max)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Quantity must be between ${service.min} and ${service.max} for this service.` 
+      });
+    }
+
+    // Calculate SMM pricing (rate is per 1000)
+    const providerRatePer1000 = parseFloat(service.rate);
+    if (isNaN(providerRatePer1000)) {
+      return res.status(500).json({ success: false, message: 'Invalid service pricing details' });
+    }
+
+    const providerPrice = (providerRatePer1000 / 1000) * qty;
+    const customerPrice = parseFloat((providerPrice * (1 + markupPercent / 100)).toFixed(4));
+    const profitMargin = parseFloat((customerPrice - providerPrice).toFixed(4));
+
+    // Validate user balance
+    const user = await db.get('SELECT balance FROM users WHERE id = ?', [req.user.id]);
+    if (!user || user.balance < customerPrice) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Insufficient balance. You need $${customerPrice.toFixed(2)} but only have $${(user ? user.balance : 0).toFixed(2)}` 
+      });
+    }
+
+    // Deduct user balance
+    await db.run('UPDATE users SET balance = balance - ? WHERE id = ?', [customerPrice, req.user.id]);
+
+    // Place order on wowsmmpanel.com
+    const orderRes = await client.placeOrder(serviceId, link, qty);
+    
+    if (orderRes.error || !orderRes.order) {
+      // Revert user balance on failure
+      await db.run('UPDATE users SET balance = balance + ? WHERE id = ?', [customerPrice, req.user.id]);
+      return res.status(400).json({ 
+        success: false, 
+        message: orderRes.error || orderRes.message || 'SMM Provider rejected the order. Balance refunded.' 
+      });
+    }
+
+    // Log the order in database
+    await db.run(
+      `INSERT INTO orders (user_id, listing_id, listing_title, quantity, price_paid, margin_earned, accounts_data, order_type, link, provider_order_id, remains, status) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        req.user.id,
+        serviceId,
+        service.name,
+        qty,
+        customerPrice,
+        profitMargin,
+        '', // No accounts credentials
+        'smm',
+        link,
+        orderRes.order,
+        qty,
+        'Pending'
+      ]
+    );
+
+    res.json({
+      success: true,
+      message: 'SMM Order placed successfully!',
+      orderId: orderRes.order,
+      price: customerPrice
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  } finally {
+    await db.close();
+  }
+});
+
+app.post('/api/smm/orders/sync', authenticateToken, async (req, res) => {
+  const db = await getDbConnection();
+  try {
+    let query = "SELECT id, provider_order_id, status FROM orders WHERE order_type = 'smm' AND status IN ('Pending', 'In progress', 'Processing')";
+    let params = [];
+    if (req.user.role !== 'admin') {
+      query += " AND user_id = ?";
+      params.push(req.user.id);
+    }
+
+    const pendingOrders = await db.all(query, params);
+    if (pendingOrders.length === 0) {
+      return res.json({ success: true, message: 'All SMM orders are already synchronized.' });
+    }
+
+    const client = await getSmmClient(db);
+    const providerOrderIds = pendingOrders.map(o => o.provider_order_id);
+    const statusRes = await client.getMultipleOrderStatus(providerOrderIds);
+
+    if (statusRes && typeof statusRes === 'object' && !statusRes.error) {
+      for (const order of pendingOrders) {
+        const provId = order.provider_order_id.toString();
+        const info = statusRes[provId];
+        if (info && info.status) {
+          let newStatus = info.status; // e.g. "Pending", "In progress", "Completed", "Partial", "Canceled"
+          const remains = info.remains ? parseInt(info.remains) : 0;
+          
+          await db.run(
+            "UPDATE orders SET status = ?, remains = ? WHERE id = ?",
+            [newStatus, remains, order.id]
+          );
+
+          // Handle refund for Canceled or Partial orders
+          if (newStatus === 'Canceled') {
+            const orderDetail = await db.get('SELECT user_id, price_paid, status FROM orders WHERE id = ?', [order.id]);
+            if (orderDetail && orderDetail.status !== 'Refunded') {
+              await db.run('UPDATE users SET balance = balance + ? WHERE id = ?', [orderDetail.price_paid, orderDetail.user_id]);
+              await db.run("UPDATE orders SET status = 'Refunded' WHERE id = ?", [order.id]);
+            }
+          } else if (newStatus === 'Partial') {
+            const orderDetail = await db.get('SELECT user_id, price_paid, quantity, status FROM orders WHERE id = ?', [order.id]);
+            if (orderDetail && orderDetail.status !== 'Refunded' && orderDetail.status !== 'Partial-Refunded') {
+              const remainsPercent = remains / orderDetail.quantity;
+              const refundAmount = parseFloat((orderDetail.price_paid * remainsPercent).toFixed(4));
+              if (refundAmount > 0) {
+                await db.run('UPDATE users SET balance = balance + ? WHERE id = ?', [refundAmount, orderDetail.user_id]);
+              }
+              await db.run("UPDATE orders SET status = 'Partial-Refunded' WHERE id = ?", [order.id]);
+            }
+          }
+        }
+      }
+    }
+
+    res.json({ success: true, message: 'SMM orders synchronized successfully.' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   } finally {

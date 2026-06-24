@@ -16,6 +16,8 @@ export default function Admin() {
   const [settings, setSettings] = useState({
     accsbulk_api_key: '',
     markup_percent: '',
+    wow_smm_api_key: '',
+    smm_markup_percent: '',
     payment_bkash: '',
     payment_nagad: '',
     payment_crypto: ''
@@ -336,6 +338,34 @@ export default function Admin() {
                 </div>
               </div>
             </div>
+
+            <div className="card" style={{ padding: '2rem', marginTop: '1.5rem' }}>
+              <h4 style={{ textTransform: 'uppercase', marginBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>
+                WOW SMM Panel API Provider Health
+              </h4>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                <div style={{ background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
+                  <div className="stat-label">SMM Provider Connection Status</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
+                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: stats.smm_status === 'Connected' ? 'var(--success)' : 'var(--accent)' }}></div>
+                    <span className="font-bold">{stats.smm_status || 'Disconnected'}</span>
+                  </div>
+                </div>
+
+                <div style={{ background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
+                  <div className="stat-label">Your Balance on WOW SMM Panel</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.25rem' }}>
+                    <span className="font-bold" style={{ fontSize: '1.5rem' }}>
+                      {stats.smm_balance !== 'N/A' && stats.smm_balance !== undefined ? `$${parseFloat(stats.smm_balance).toFixed(2)}` : 'N/A'}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    Make sure to deposit funds to your wowsmmpanel.com panel to cover SMM orders.
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -431,19 +461,25 @@ export default function Admin() {
                     <thead>
                       <tr>
                         <th>Order ID</th>
+                        <th>Type</th>
                         <th>User Email</th>
-                        <th>Listing Resold</th>
+                        <th>Service / Listing</th>
                         <th>Qty</th>
                         <th>Price Paid</th>
                         <th>Margin (Profit)</th>
                         <th>Date</th>
-                        <th>Delivery</th>
+                        <th>SMM Link / Delivery</th>
                       </tr>
                     </thead>
                     <tbody>
                       {orders.map((ord) => (
                         <tr key={ord.id}>
                           <td>#{ord.id}</td>
+                          <td>
+                            <span className={`badge ${ord.order_type === 'smm' ? 'badge-pending' : 'badge-approved'}`} style={{ fontSize: '0.65rem' }}>
+                              {ord.order_type === 'smm' ? 'SMM' : 'Account'}
+                            </span>
+                          </td>
                           <td>{ord.user_email}</td>
                           <td className="font-bold">{ord.listing_title}</td>
                           <td>{ord.quantity}</td>
@@ -451,9 +487,18 @@ export default function Admin() {
                           <td style={{ color: 'var(--success)', fontWeight: 'bold' }}>+${parseFloat(ord.margin_earned).toFixed(2)}</td>
                           <td>{new Date(ord.purchased_at).toLocaleDateString()}</td>
                           <td>
-                            <button onClick={() => setSelectedOrder(ord)} className="btn btn-outline btn-sm">
-                              <Eye size={12} /> Accounts
-                            </button>
+                            {ord.order_type === 'smm' ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                <a href={ord.link} target="_blank" rel="noreferrer" className="color-accent" style={{ fontSize: '0.8rem', textDecoration: 'underline' }}>
+                                  View Link
+                                </a>
+                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Status: {ord.status}</span>
+                              </div>
+                            ) : (
+                              <button onClick={() => setSelectedOrder(ord)} className="btn btn-outline btn-sm">
+                                <Eye size={12} /> Accounts
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -596,6 +641,32 @@ export default function Admin() {
                   />
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginTop: '0.25rem' }}>
                     Prices imported from the provider will be increased by this percentage in the public storefront. E.g. $10.00 with 15% markup becomes $11.50.
+                  </span>
+                </div>
+
+                <h4 style={{ textTransform: 'uppercase', marginBottom: '1rem', color: 'var(--accent)', marginTop: '2rem' }}>WOW SMM Panel Connection</h4>
+                <div className="form-group">
+                  <label className="form-label">WOW SMM API Connection Key</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={settings.wow_smm_api_key || ''}
+                    onChange={(e) => setSettings({ ...settings, wow_smm_api_key: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="form-group" style={{ marginBottom: '2.5rem' }}>
+                  <label className="form-label">SMM Profit Markup Margin (%)</label>
+                  <input
+                    type="number"
+                    className="form-control"
+                    value={settings.smm_markup_percent || ''}
+                    onChange={(e) => setSettings({ ...settings, smm_markup_percent: e.target.value })}
+                    required
+                  />
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginTop: '0.25rem' }}>
+                    SMM services prices imported from wowsmmpanel.com will be increased by this percentage.
                   </span>
                 </div>
 

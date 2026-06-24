@@ -41,9 +41,33 @@ export async function initDb() {
       margin_earned REAL NOT NULL,
       accounts_data TEXT NOT NULL,
       purchased_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      order_type TEXT DEFAULT 'account',
+      link TEXT DEFAULT NULL,
+      provider_order_id INTEGER DEFAULT NULL,
+      remains INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'Completed',
       FOREIGN KEY (user_id) REFERENCES users(id)
     )
   `);
+
+  // Migration for SMM columns on orders table
+  const columns = await db.all('PRAGMA table_info(orders)');
+  const columnNames = columns.map(c => c.name);
+  if (!columnNames.includes('order_type')) {
+    await db.exec("ALTER TABLE orders ADD COLUMN order_type TEXT DEFAULT 'account'");
+  }
+  if (!columnNames.includes('link')) {
+    await db.exec("ALTER TABLE orders ADD COLUMN link TEXT DEFAULT NULL");
+  }
+  if (!columnNames.includes('provider_order_id')) {
+    await db.exec("ALTER TABLE orders ADD COLUMN provider_order_id INTEGER DEFAULT NULL");
+  }
+  if (!columnNames.includes('remains')) {
+    await db.exec("ALTER TABLE orders ADD COLUMN remains INTEGER DEFAULT 0");
+  }
+  if (!columnNames.includes('status')) {
+    await db.exec("ALTER TABLE orders ADD COLUMN status TEXT DEFAULT 'Completed'");
+  }
 
   // Create Deposits table
   await db.exec(`
@@ -85,6 +109,9 @@ export async function initDb() {
     { key: 'accsbulk_api_key', value: 'acb_Jhq3gKPLjGgEaBjkhW3sknLPrFRdJSILTaw79ckwB1QCk7ax' },
     { key: 'accsbulk_base_url', value: 'https://accsbulk.com/api/v1' },
     { key: 'markup_percent', value: '15' },
+    { key: 'wow_smm_api_key', value: '09ee1dfc0f11b367cecc8ef2df20ab9b' },
+    { key: 'smm_base_url', value: 'https://wowsmmpanel.com/api/v2' },
+    { key: 'smm_markup_percent', value: '20' },
     { key: 'payment_bkash', value: 'bKash Personal: 017XXXXXXXX' },
     { key: 'payment_nagad', value: 'Nagad Personal: 019XXXXXXXX' },
     { key: 'payment_crypto', value: 'USDT (TRC20): Txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' }

@@ -1040,6 +1040,15 @@ tr:hover td {
   justify-content: flex-end;
 }
 
+/* SMM Limit and Price Custom Widths */
+.listing-row-stock.smm-limit, .subcategory-header-label-stock.smm-limit {
+  width: 150px;
+}
+
+.listing-row-price-block.smm-price, .subcategory-header-label-price.smm-price {
+  width: 150px;
+}
+
 @media (max-width: 768px) {
   .listing-row {
     flex-direction: column;
@@ -1048,9 +1057,9 @@ tr:hover td {
     padding: 1.25rem;
   }
   .listing-row-stock, .listing-row-price-block, .listing-row-action {
-    width: 100%;
-    text-align: left;
-    justify-content: flex-start;
+    width: 100% !important;
+    text-align: left !important;
+    justify-content: flex-start !important;
   }
 }
 
