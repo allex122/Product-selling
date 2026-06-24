@@ -70,7 +70,22 @@ export default function Home() {
         const res = await fetch('/api/categories');
         const data = await res.json();
         if (data.success && Array.isArray(data.data)) {
-          setCategories(data.data);
+          // Sort categories: Facebook first, Instagram second, then alphabetical
+          const sortedCats = data.data.sort((a, b) => {
+            const cleanA = a.title.toLowerCase();
+            const cleanB = b.title.toLowerCase();
+            const isFbA = cleanA.includes('facebook');
+            const isFbB = cleanB.includes('facebook');
+            const isIgA = cleanA.includes('instagram');
+            const isIgB = cleanB.includes('instagram');
+
+            if (isFbA && !isFbB) return -1;
+            if (!isFbA && isFbB) return 1;
+            if (isIgA && !isIgB) return -1;
+            if (!isIgA && isIgB) return 1;
+            return cleanA.localeCompare(cleanB);
+          });
+          setCategories(sortedCats);
           // Load all listings initially, no default category selection
         }
       } catch (e) {
@@ -304,7 +319,22 @@ export default function Home() {
         </div>
       ) : (
         <div className="listings-list-container">
-          {Object.entries(groupedListings).map(([subcatName, items]) => {
+          {Object.entries(groupedListings)
+            .sort(([nameA], [nameB]) => {
+              const cleanA = nameA.toLowerCase();
+              const cleanB = nameB.toLowerCase();
+              const isFbA = cleanA.includes('facebook');
+              const isFbB = cleanB.includes('facebook');
+              const isIgA = cleanA.includes('instagram');
+              const isIgB = cleanB.includes('instagram');
+
+              if (isFbA && !isFbB) return -1;
+              if (!isFbA && isFbB) return 1;
+              if (isIgA && !isIgB) return -1;
+              if (!isIgA && isIgB) return 1;
+              return cleanA.localeCompare(cleanB);
+            })
+            .map(([subcatName, items]) => {
             const isExpanded = !!expandedGroups[subcatName];
             const displayItems = isExpanded ? items : items.slice(0, 6);
 
