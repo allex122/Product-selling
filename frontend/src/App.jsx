@@ -343,7 +343,7 @@ export default function App() {
           </main>
 
           <footer style={{ borderTop: '1px solid var(--border-color)', padding: '2rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-            <p>© {new Date().getFullYear()} CYBER2 Store. Powered by AccsBulk Network. All rights reserved.</p>
+            <p>© {new Date().getFullYear()} CYBER2 Store. All rights reserved.</p>
           </footer>
           
           {/* Floating Live Chat Widget */}

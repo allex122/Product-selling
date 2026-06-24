@@ -414,12 +414,12 @@ export default function Admin() {
           </div>
         )}
 
-        {/* Tab 3: Resell Orders */}
+        {/* Tab 3: Store Orders */}
         {activeTab === 'orders' && (
           <div>
-            <h3>All Resell Orders</h3>
+            <h3>All Store Orders</h3>
             <p className="text-secondary" style={{ fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-              Orders successfully resold via AccsBulk API, along with markup margin profit earned.
+              Orders successfully fulfilled via API, along with markup margin profit earned.
             </p>
 
             {orders.length === 0 ? (

@@ -134,7 +134,7 @@ export default function Home() {
       <section className="hero">
         <h1 className="hero-title">CYBER2 Marketplace</h1>
         <p className="hero-subtitle">
-          Instantly buy verified, premium bulk accounts. Powered by the AccsBulk network. Fully automated.
+          Instantly buy verified, premium bulk accounts. Fully automated and secured.
         </p>
 
         {/* Cyber Search Bar */}
