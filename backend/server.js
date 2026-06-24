@@ -576,6 +576,11 @@ app.get('/api/admin/stats', requireAdmin, async (req, res) => {
         smm_status: smmStatus
       }
     });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  } finally {
+    await db.close();
+  }
 });
 
 // --- SMM Panel Routes ---
