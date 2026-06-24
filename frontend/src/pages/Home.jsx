@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, ShoppingBag, Eye, Layers } from 'lucide-react';
+import { Search, ShoppingBag, Eye, Layers, LayoutGrid, ChevronDown } from 'lucide-react';
 
 const getSocialIcon = (item) => {
   const title = item.title?.toLowerCase() || '';
@@ -52,6 +52,8 @@ export default function Home() {
   const [searchText, setSearchText] = useState('');
   const [loading, setLoading] = useState(true);
   const [expandedGroups, setExpandedGroups] = useState({});
+  const [catDropdownOpen, setCatDropdownOpen] = useState(false);
+  const [catSearch, setCatSearch] = useState('');
   const navigate = useNavigate();
 
   const toggleGroupExpand = (groupName) => {
@@ -69,10 +71,7 @@ export default function Home() {
         const data = await res.json();
         if (data.success && Array.isArray(data.data)) {
           setCategories(data.data);
-          // Set first category active by default if available
-          if (data.data.length > 0) {
-            setSelectedCat(data.data[0]);
-          }
+          // Load all listings initially, no default category selection
         }
       } catch (e) {
         console.error('Failed to fetch categories:', e);
@@ -80,6 +79,21 @@ export default function Home() {
     };
     fetchCats();
   }, []);
+
+  // Close category dropdown when clicking outside
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (!e.target.closest('.category-dropdown-container')) {
+        setCatDropdownOpen(false);
+      }
+    };
+    if (catDropdownOpen) {
+      document.addEventListener('click', handleOutsideClick);
+    }
+    return () => {
+      document.removeEventListener('click', handleOutsideClick);
+    };
+  }, [catDropdownOpen]);
 
   // Fetch Listings when category or search changes
   useEffect(() => {
@@ -137,19 +151,84 @@ export default function Home() {
           Instantly buy verified, premium bulk accounts. Fully automated and secured.
         </p>
 
-        {/* Cyber Search Bar */}
-        <form onSubmit={handleSearchSubmit} className="search-container">
-          <input
-            type="text"
-            className="search-input"
-            placeholder="Search for Facebook, Gmail, Telegram accounts..."
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-          />
-          <button type="submit" className="search-icon-btn">
-            <Search size={20} />
-          </button>
-        </form>
+        {/* Dropdown and Search Bar Container */}
+        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap', marginTop: '1.5rem', width: '100%', maxWidth: '800px', margin: '1.5rem auto 0', position: 'relative' }}>
+          {/* Select a Category Dropdown */}
+          <div className="category-dropdown-container">
+            <button 
+              type="button" 
+              className="category-dropdown-btn"
+              onClick={() => setCatDropdownOpen(!catDropdownOpen)}
+            >
+              <LayoutGrid size={18} />
+              <span>{selectedCat ? selectedCat.title : 'Select a Category'}</span>
+              <ChevronDown size={18} style={{ transform: catDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
+            </button>
+
+            {catDropdownOpen && (
+              <div className="category-dropdown-menu">
+                <div className="category-dropdown-search-box">
+                  <input
+                    type="text"
+                    className="category-dropdown-search-input"
+                    placeholder="Search category..."
+                    value={catSearch}
+                    onChange={(e) => setCatSearch(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+                <div className="category-dropdown-list">
+                  <div 
+                    className={`category-dropdown-item ${selectedCat === null ? 'active' : ''}`}
+                    onClick={() => {
+                      setSelectedCat(null);
+                      setCatDropdownOpen(false);
+                      setCatSearch('');
+                    }}
+                  >
+                    <Layers size={16} />
+                    <span>All Categories</span>
+                  </div>
+                  {categories
+                    .filter(cat => cat.title.toLowerCase().includes(catSearch.toLowerCase()))
+                    .map(cat => (
+                      <div 
+                        key={cat.id}
+                        className={`category-dropdown-item ${selectedCat && selectedCat.id === cat.id ? 'active' : ''}`}
+                        onClick={() => {
+                          setSelectedCat(cat);
+                          setCatDropdownOpen(false);
+                          setCatSearch('');
+                        }}
+                      >
+                        {cat.image ? (
+                          <img src={cat.image} alt={cat.title} className="category-dropdown-item-img" onError={(e) => { e.target.style.display = 'none'; }} />
+                        ) : (
+                          <ShoppingBag size={16} />
+                        )}
+                        <span>{cat.title}</span>
+                      </div>
+                    ))
+                  }
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Cyber Search Bar */}
+          <form onSubmit={handleSearchSubmit} className="search-container" style={{ margin: 0, flex: 1, minWidth: '280px' }}>
+            <input
+              type="text"
+              className="search-input"
+              placeholder="Search for Facebook, Gmail, Telegram accounts..."
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+            />
+            <button type="submit" className="search-icon-btn">
+              <Search size={20} />
+            </button>
+          </form>
+        </div>
       </section>
 
       {/* Category Horizontal Marquee Pills Selector */}
