@@ -167,7 +167,7 @@ export default function Home() {
         </p>
 
         {/* Dropdown and Search Bar Container */}
-        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap', marginTop: '1.5rem', width: '100%', maxWidth: '800px', margin: '1.5rem auto 0', position: 'relative' }}>
+        <div className="search-filter-wrapper">
           {/* Select a Category Dropdown */}
           <div className="category-dropdown-container">
             <button 
@@ -175,8 +175,10 @@ export default function Home() {
               className="category-dropdown-btn"
               onClick={() => setCatDropdownOpen(!catDropdownOpen)}
             >
-              <LayoutGrid size={18} />
-              <span>{selectedCat ? selectedCat.title : 'Select a Category'}</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <LayoutGrid size={18} />
+                <span>{selectedCat ? selectedCat.title : 'Select a Category'}</span>
+              </span>
               <ChevronDown size={18} style={{ transform: catDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
             </button>
 
@@ -231,7 +233,7 @@ export default function Home() {
           </div>
 
           {/* Cyber Search Bar */}
-          <form onSubmit={handleSearchSubmit} className="search-container" style={{ margin: 0, flex: 1, minWidth: '280px' }}>
+          <form onSubmit={handleSearchSubmit} className="search-container" style={{ flex: 1, minWidth: '280px' }}>
             <input
               type="text"
               className="search-input"
